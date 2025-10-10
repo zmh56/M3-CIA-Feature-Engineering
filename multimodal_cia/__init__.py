@@ -10,8 +10,8 @@ Mild Cognitive Impairment (MCI) and Dementia.
 """
 
 __version__ = "1.0.0"
-__author__ = "Your Name"
-__email__ = "your.email@institution.edu"
+__author__ = "Minghui"
+__email__ = "zmh56@seu.edu.cn"
 
 # Import main classes for easy access
 from .models.multimodal_model import MultiModalModel, CascadedMultiLabelModel
