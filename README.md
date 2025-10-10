@@ -19,10 +19,10 @@ A comprehensive deep learning framework for cognitive impairment assessment usin
 
 | Modality | Description | Features | Implementation |
 |----------|-------------|----------|----------------|
-| **EEG** | Electroencephalography signals from cognitive tasks | N_EEG features (per-task features × multiple tasks) | Statistical, spectral, non-linear analysis |
-| **ECG** | Electrocardiography signals with HRV analysis | N_ECG features | Time/frequency domain, non-linear, entropy measures |
+| **EEG** | Electroencephalography signals from cognitive tasks | N_EEG features (multiple tasks × per-task features) | Statistical, spectral, non-linear analysis |
+| **ECG** | Electrocardiography signals with HRV analysis | N_ECG features (multiple tasks × per-task features) | Time/frequency domain, non-linear, entropy measures |
 | **Speech** | Audio features from Cookie Theft picture description | N_Speech features | OpenSMILE, WeNet ASR, BERT-Chinese |
-| **Video** | Facial expression analysis using Action Units | N_Video features (AU features × multiple segments) | OpenFace, FACS-based analysis |
+| **Video** | Facial expression analysis using Action Units | N_Video features (multiple segments × AU features) | OpenFace, FACS-based analysis |
 | **Task** | Task-based cognitive assessment scores | N_Task features | Neuropsychological measures |
 | **Base** | Demographic and baseline information | N_Base features | Age, gender, education, etc. |
 
@@ -55,10 +55,10 @@ Cascaded Classification:
 | Variable | Description | Typical Values |
 |----------|-------------|----------------|
 | `N_total` | Total feature dimension across all modalities | Configurable |
-| `N_EEG` | EEG feature dimension | Per-task features × number of tasks |
-| `N_ECG` | ECG feature dimension | HRV and morphological features |
+| `N_EEG` | EEG feature dimension | Number of tasks × per-task features |
+| `N_ECG` | ECG feature dimension | Number of tasks × per-task features |
 | `N_Speech` | Speech feature dimension | Acoustic + paralinguistic + semantic features |
-| `N_Video` | Video feature dimension | Action Units × number of segments |
+| `N_Video` | Video feature dimension | Number of segments × Action Units |
 | `N_Task` | Task feature dimension | Neuropsychological measures |
 | `N_Base` | Base feature dimension | Demographic and baseline features |
 | `D_embed` | Embedding dimension for each modality | Configurable (e.g., 8) |
@@ -68,7 +68,7 @@ Cascaded Classification:
 ## 📁 Project Structure
 
 ```
-M3-CIA/
+M3-CIA-Feature-Engineering/
 ├── 📁 multimodal_cia/                    # Main Python package
 │   ├── 📁 models/                        # Deep learning models
 │   │   ├── multimodal_model.py           # Multi-modal fusion model
@@ -80,31 +80,16 @@ M3-CIA/
 │   └── 📁 evaluation/                    # Evaluation metrics
 │       └── metrics.py                    # Comprehensive evaluation metrics
 ├── 📁 scripts/                           # Main execution scripts
-│   ├── train.py                          # Training script
-│   ├── evaluate.py                       # Model evaluation script
-│   └── generate_obfuscated_data.py       # Data generation script
-├── 📁 examples/                          # Usage examples
-│   ├── basic_usage.py                    # Basic usage example
-│   └── README.md                         # Examples documentation
-├── 📁 tests/                             # Unit tests
-│   ├── test_models.py                    # Model tests
-│   ├── test_data_loader.py               # Data loader tests
-│   └── README.md                         # Testing documentation
-├── 📁 configs/                           # Configuration files
-│   ├── default_config.json               # Default configuration
-│   └── README.md                         # Configuration documentation
+│   └── train.py                          # Training script
 ├── 📁 Feature Engineering/               # Feature documentation
 │   ├── eeg_features_detailed.md          # EEG feature descriptions
 │   ├── ecg_features_detailed.md          # ECG feature descriptions
 │   ├── speech_features_detailed.md       # Speech feature descriptions
 │   └── facial_expression_features_detailed.md # Video feature descriptions
-├── 📁 data_pre_mat/                      # Training data
-│   └── data.mat                          # Multi-modal dataset
-├── 📁 checkpoints/                       # Model checkpoints
-│   └── experiment_*/                     # Experiment-specific checkpoints
+├── 📁 data_pre_mat/                      # Data preprocessing and training data
+│   └── sampled_100.npz 
 ├── requirements.txt                      # Python dependencies
 ├── setup.py                              # Package installation script
-├── config.py                             # Configuration management
 ├── LICENSE                                # MIT License
 ├── .gitignore                            # Git ignore rules
 └── README.md                             # This file
@@ -121,8 +106,8 @@ M3-CIA/
 ### Quick Start
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/M3-CIA.git
-cd M3-CIA
+git clone https://github.com/zmh56/M3-CIA-Feature-Engineering.git
+cd M3-CIA-Feature-Engineering
 
 # Create virtual environment
 conda create -n m3cia python=3.8
@@ -149,47 +134,22 @@ pip install -e .
 
 ## 🚀 Quick Start
 
-### 1. Run Basic Example
-```bash
-# Run the basic usage example
-cd examples
-python basic_usage.py
-```
-
-### 2. Train the Model
+### 1. Train the Model
 ```bash
 # Simple training with default parameters
-python scripts/train.py --data_path ./data/data.mat --num_epochs 20 --batch_size 16
+python scripts/train.py --data_path ./data_example/sampled_100.npz --num_epochs 40 --batch_size 16
 
 # Advanced training with custom parameters
 python scripts/train.py \
-    --data_path ./data/data.mat \
-    --num_epochs 100 \
-    --batch_size 32 \
+    --data_path ./data_example/sampled_100.npz \
+    --num_epochs 50 \
+    --batch_size 16 \
     --learning_rate 0.001 \
     --intermediate_dim 7 \
-    --save_dir ./checkpoints
+    --patience 30
 ```
 
-### 2. Evaluate the Model
-```bash
-# Evaluate trained model
-python scripts/evaluate.py \
-    --model_path ./checkpoints/best_model.pth \
-    --data_path ./data/data.mat \
-    --output_dir ./results
-```
-
-### 3. Configuration Management
-```bash
-# Use custom configuration
-python scripts/train.py --config configs/my_config.json
-
-# Create default configuration
-python config.py
-```
-
-### 4. Programmatic Usage
+### 2. Programmatic Usage
 ```python
 from multimodal_cia.models import MultiModalModel
 from multimodal_cia.data import create_mat_data_loaders
@@ -203,46 +163,38 @@ model = MultiModalModel(
 )
 
 # Load data
-train_loader, val_loader, test_loader = create_mat_data_loaders(
-    data_path='./data/data.mat',
+train_loader, val_loader = create_mat_data_loaders(
+    data_path='./data_example/sampled_100.npz',
     batch_size=16,
-    test_split=0.2,
-    val_split=0.2
+    train_ratio=0.8
 )
 
 # Configure training
 trainer = Trainer(
     model=model,
+    train_loader=train_loader,
+    val_loader=val_loader,
     learning_rate=0.001,
-    batch_size=16,
     num_epochs=100,
-    early_stopping=True,
-    save_dir='./checkpoints'
+    patience=30
 )
 
 # Start training
-trainer.train(train_loader, val_loader)
+training_history = trainer.train_simple()
 ```
 
 ## 🧪 Testing
 
-### Run Unit Tests
+### Basic Functionality Test
 ```bash
-# Run all tests
-python -m pytest tests/
-
-# Run specific test files
-python -m pytest tests/test_models.py
-python -m pytest tests/test_data_loader.py
-
-# Run with coverage
-python -m pytest tests/ --cov=multimodal_cia --cov-report=html
+# Test basic training functionality
+python scripts/train.py --data_path ./data_example/sampled_100.npz --num_epochs 1 --batch_size 16
 ```
 
-### Test Structure
-- **Model Tests**: Test model creation, forward pass, parameter counting
-- **Data Loader Tests**: Test data loading, batch creation, error handling
-- **Integration Tests**: Test complete workflows
+### Model Validation
+- **Model Creation**: Test model initialization and parameter counting
+- **Data Loading**: Test data loading and batch creation
+- **Training Loop**: Test complete training workflow
 
 ## 📈 Model Architecture Details
 
@@ -273,11 +225,10 @@ class TaskSEEncoder(nn.Module):
 ### Training Configuration
 - **Optimizer**: Adam with learning rate 0.001
 - **Loss Functions**: BCEWithLogitsLoss (intermediate), CrossEntropyLoss (final)
-- **Early Stopping**: Patience of 10 epochs
 - **Batch Size**: 16 (adjustable)
-- **Epochs**: 100 (with early stopping)
+- **Epochs**: 50
 
-### Configuration Flexibility
+<!-- ### Configuration Flexibility
 The framework supports flexible configuration of feature dimensions and model architecture:
 
 ```python
@@ -297,7 +248,7 @@ config = {
         'num_classes': N_classes,       # Final classification classes
     }
 }
-```
+``` -->
 
 ## 🔬 Research Applications
 
@@ -329,11 +280,10 @@ This framework is designed for comprehensive cognitive assessment research:
 - [Speech Features](Feature%20Engineering/speech_features_detailed.md) - Acoustic/paralinguistic/semantic features
 - [Facial Expression Features](Feature%20Engineering/facial_expression_features_detailed.md) - Action Units with OpenFace
 
-### Technical Documentation
+<!-- ### Technical Documentation
 - **Model Architecture**: DTA encoder with cascaded classification
-- **Data Format**: MATLAB .mat files with standardized feature extraction
 - **Training Pipeline**: End-to-end training with early stopping and validation
-- **Evaluation Metrics**: Comprehensive classification and regression metrics
+- **Evaluation Metrics**: Comprehensive classification and regression metrics -->
 
 ### Implementation Details
 - **OpenSMILE**: Acoustic feature extraction (eGeMAPSV02)
@@ -352,12 +302,12 @@ pip install torch numpy pandas scikit-learn matplotlib seaborn
 pip install scipy imbalanced-learn shap h5py
 
 # Clone and setup
-git clone https://github.com/your-username/M3-CIA.git
-cd M3-CIA
+git clone https://github.com/zmh56/M3-CIA-Feature-Engineering.git
+cd M3-CIA-Feature-Engineering
 pip install -e .
 
 # Run basic tests
-python scripts/train.py --num_epochs 1 --batch_size 16
+python scripts/train.py --data_path ./data_example/sampled_100.npz --num_epochs 1 --batch_size 16
 ```
 
 ### Contribution Areas
@@ -372,13 +322,13 @@ python scripts/train.py --num_epochs 1 --batch_size 16
 If you use this framework in your research, please cite:
 
 ```bibtex
-@article{m3cia2024,
-  title={Multi-Modal Deep Learning Framework for Cognitive Impairment Assessment Using Wearable Physiological and Behavioral Signals},
-  author={[Your Name] and [Co-authors]},
-  journal={[Target Journal]},
-  year={2024},
-  publisher={[Publisher]},
-  doi={[DOI when available]}
+@article{m3cia2025,
+  title={Cognitive Impairment Assessment across Wearable Multimodal Signals, Multitask Paradigms, and Multidimensional Cognitive Functions},
+  author={},
+  journal={},
+  year={2025},
+  publisher={},
+  doi={}
 }
 ```
 
@@ -404,7 +354,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Contributors to the open-source tools and libraries used in this project
 - Research community for sharing knowledge and methodologies
 
-## 📞 Contact & Support
+<!-- ## 📞 Contact & Support
 
 ### Research Team
 - **Lead Researcher**: [Your Name](mailto:your.email@institution.edu)
@@ -412,9 +362,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Research Group**: [Your Research Group]
 
 ### Technical Support
-- **Issues**: [GitHub Issues](https://github.com/your-username/M3-CIA/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/M3-CIA/discussions)
-- **Documentation**: [Project Wiki](https://github.com/your-username/M3-CIA/wiki)
+- **Issues**: [GitHub Issues](https://github.com/zmh56/M3-CIA-Feature-Engineering/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/zmh56/M3-CIA-Feature-Engineering/discussions)
+- **Documentation**: [Project Wiki](https://github.com/zmh56/M3-CIA-Feature-Engineering/wiki) -->
 
 ## ⚠️ Important Notes
 
