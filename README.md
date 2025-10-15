@@ -324,7 +324,7 @@ If you use this framework in your research, please cite:
 ```bibtex
 @article{m3cia2025,
   title={Cognitive Impairment Assessment across Wearable Multimodal Signals, Multitask Paradigms, and Multidimensional Cognitive Functions},
-  author={},
+  author={Minghui Zhao},
   journal={},
   year={2025},
   publisher={},
