@@ -61,9 +61,9 @@ Cascaded Classification:
 | `N_Video` | Video feature dimension | Number of segments × Action Units |
 | `N_Task` | Task feature dimension | Neuropsychological measures |
 | `N_Base` | Base feature dimension | Demographic and baseline features |
-| `D_embed` | Embedding dimension for each modality | Configurable (e.g., 8) |
-| `N_intermediate` | Number of intermediate supervision classes | Configurable (e.g., 7) |
-| `N_classes` | Number of final classification classes | 2 (NC/MCI/Dementia) |
+| `D_embed` | Embedding dimension for each modality | Configurable |
+| `N_intermediate` | Number of intermediate supervision classes | Configurable |
+| `N_classes` | Number of final classification classes | (NC, MCI/Dementia) |
 
 ## 📁 Project Structure
 
