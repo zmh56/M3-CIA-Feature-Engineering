@@ -329,11 +329,6 @@ EEG features provide objective measures of brain function that complement tradit
    - Features: ECG, EEG, EDA, EMG processing and analysis
    - Documentation: https://neurokit2.readthedocs.io/
 
-5. **EEGLAB**: MATLAB toolbox for EEG analysis
-   - Website: https://sccn.ucsd.edu/eeglab/
-   - Features: ICA, artifact removal, spectral analysis, connectivity
-   - Tutorial: https://sccn.ucsd.edu/wiki/EEGLAB
-
 
 <!-- #### R Libraries
 1. **eegkit**: EEG data analysis toolkit
@@ -345,11 +340,17 @@ EEG features provide objective measures of brain function that complement tradit
    - Features: Preprocessing, artifact removal, visualization -->
 
 #### MATLAB Toolboxes
-1. **FieldTrip**: Advanced EEG/MEG analysis
+
+1. **EEGLAB**: MATLAB toolbox for EEG analysis
+   - Website: https://sccn.ucsd.edu/eeglab/
+   - Features: ICA, artifact removal, spectral analysis, connectivity
+   - Tutorial: https://sccn.ucsd.edu/wiki/EEGLAB
+
+2. **FieldTrip**: Advanced EEG/MEG analysis
    - Website: https://www.fieldtriptoolbox.org/
    - Features: Source analysis, connectivity, statistics, real-time processing
 
-2. **SPM**: Statistical Parametric Mapping
+3. **SPM**: Statistical Parametric Mapping
    - Website: https://www.fil.ion.ucl.ac.uk/spm/
    - Features: Statistical analysis, source reconstruction, group analysis
 
