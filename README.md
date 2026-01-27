@@ -81,11 +81,6 @@ M3-CIA-Feature-Engineering/
 │       └── metrics.py                    # Comprehensive evaluation metrics
 ├── 📁 scripts/                           # Main execution scripts
 │   └── train.py                          # Training script
-├── 📁 Feature Engineering/               # Feature documentation
-│   ├── eeg_features_detailed.md          # EEG feature descriptions
-│   ├── ecg_features_detailed.md          # ECG feature descriptions
-│   ├── speech_features_detailed.md       # Speech feature descriptions
-│   └── facial_expression_features_detailed.md # Video feature descriptions
 ├── 📁 data_pre_mat/                      # Data preprocessing and training data
 │   └── sampled_100.npz 
 ├── requirements.txt                      # Python dependencies
@@ -272,24 +267,6 @@ This framework is designed for comprehensive cognitive assessment research:
 - **Clinical Validation**: Designed for real-world clinical applications
 - **Open Source**: Transparent and extensible implementation
 
-## 📚 Documentation
-
-### Feature Engineering Documentation
-- [EEG Features](Feature%20Engineering/eeg_features_detailed.md) - Per-task features, statistical/spectral/non-linear analysis
-- [ECG Features](Feature%20Engineering/ecg_features_detailed.md) - HRV features, time/frequency/entropy measures
-- [Speech Features](Feature%20Engineering/speech_features_detailed.md) - Acoustic/paralinguistic/semantic features
-- [Facial Expression Features](Feature%20Engineering/facial_expression_features_detailed.md) - Action Units with OpenFace
-
-<!-- ### Technical Documentation
-- **Model Architecture**: DTA encoder with cascaded classification
-- **Training Pipeline**: End-to-end training with early stopping and validation
-- **Evaluation Metrics**: Comprehensive classification and regression metrics -->
-
-### Implementation Details
-- **OpenSMILE**: Acoustic feature extraction (eGeMAPSV02)
-- **WeNet**: End-to-end speech recognition
-- **BERT-Chinese**: Semantic analysis and similarity computation
-- **OpenFace**: Facial Action Unit detection and analysis
 
 ## 🤝 Contributing
 
@@ -323,10 +300,10 @@ If you use this framework in your research, please cite:
 
 ```bibtex
 @article{m3cia2025,
-  title={Cognitive Impairment Assessment across Wearable Multimodal Signals, Multitask Paradigms, and Multidimensional Cognitive Functions},
-  author={Minghui Zhao},
+  title={Task-evoked multimodal wearable sensing for cognitive impairment assessment},
+  author={},
   journal={},
-  year={2025},
+  year={2026},
   publisher={},
   doi={}
 }
