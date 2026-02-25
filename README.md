@@ -299,8 +299,8 @@ python scripts/train.py --data_path ./data_example/sampled_100.npz --num_epochs 
 If you use this framework in your research, please cite:
 
 ```bibtex
-@article{m3cia2025,
-  title={Task-evoked multimodal wearable sensing for cognitive impairment assessment},
+@article{m3cia,
+  title={},
   author={},
   journal={},
   year={2026},
