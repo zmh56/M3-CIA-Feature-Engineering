@@ -224,19 +224,18 @@ These features require bilateral or multi-electrode recordings. They capture int
 ## Implementation Pipeline
 
 ### Data Preprocessing
-1. **Sampling Rate**: Typically 250 Hz or higher for adequate frequency resolution
-2. **Filtering**: 
-   - High-pass filter (>0.5 Hz) to remove DC drift
-   - Low-pass filter (<100 Hz) to remove muscle artifacts
-   - Notch filter (50/60 Hz) to remove line noise
-3. **Artifact Removal**: 
-   - Independent Component Analysis (ICA)
-   - Automatic artifact detection algorithms
-   - Manual artifact rejection
-4. **Epoch Length**: 1–4 seconds per epoch depending on cognitive task
+1. **Acquisition**: Raw EEG signals acquired at 250 Hz
+2. **Band-Pass Filtering**: Filter (0.5–50 Hz) to isolate relevant neural oscillations while removing low-frequency drift and high-frequency noise
+3. **Signal Quality Assessment**: Sliding-window statistical approach to dynamically assess signal quality
+4. **Artifact Correction**: Artifact-contaminated segments (e.g., ocular or muscle artifacts) identified and corrected using wavelet decomposition combined with wavelet quantile normalization (WQN)
+5. **Reconstruction**: Cleaned signals reconstructed from wavelet components
+6. **Downsampling**: Preprocessed signals downsampled to 100 Hz
+7. **Epoch Length**: 1–4 seconds per epoch depending on cognitive task (for segmentation)
+
+The preprocessed time-series (100 Hz) serve as the input for extracting nonlinear, spectral, and temporal features.
 
 ### Feature Extraction Pipeline
-1. **Segmentation**: Divide continuous EEG into task-specific epochs
+1. **Segmentation**: Divide continuous preprocessed EEG into task-specific epochs
 2. **Feature Computation**: Extract features from each category for each epoch
 3. **Aggregation**: Compute statistics (mean, std) across epochs within each task
 4. **Normalization**: Apply z-score normalization or min-max scaling
