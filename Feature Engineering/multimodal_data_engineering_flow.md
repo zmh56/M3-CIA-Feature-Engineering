@@ -257,7 +257,6 @@ We also provide a representative extracted feature file in `.npz` format (e.g., 
 | Final Label | The binary final cognitive impairment label. |
 | Domain Targets | Binary targets mapped to various intermediate cognitive domains. |
 
-For full reproducibility and external validation, we recommend releasing: De-identified raw sensor recordings where consent and privacy constraints allow.
 
 ## Output Feature Tables and Downstream Modeling
 
