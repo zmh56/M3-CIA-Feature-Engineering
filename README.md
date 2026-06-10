@@ -7,6 +7,10 @@
 
 A comprehensive deep learning framework for cognitive impairment assessment using wearable physiological and behavioral signals. This repository implements a cascaded neural network architecture with DTA (Dynamic Task-Adaptive) encoders for multi-modal fusion, enabling early detection and classification of cognitive impairment including Mild Cognitive Impairment (MCI) and Dementia (DE).
 
+## 🆕 Latest Update 
+- **Feature Engineering Module Updated**: Detailed feature extraction procedures and implementation code have been updated in the `Feature Engineering` folder, including modality-specific processing pipelines for EEG, ECG, speech, video, task-based, and baseline features.
+
+
 ## 🚀 Key Features
 
 - **Multi-Modal Signal Processing**: Support for EEG, ECG, Speech, Video, and Task-based behavioral data
