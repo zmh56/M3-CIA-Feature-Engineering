@@ -20,7 +20,7 @@ The pipeline processes four synchronously acquired modalities: EEG, ECG, speech,
 1. Raw multimodal signals are collected during cognitive tasks.
 2. Each sensor stream is stored independently using its native or derived format.
 3. Modality-specific preprocessing removes artifacts and normalizes basic signal properties.
-4. Feature extraction converts variable-length raw signals into fixed-length numerical descriptors.
+4. Feature extraction uses feature-appropriate analysis windows and converts variable-length raw signals into fixed-length numerical descriptors.
 5. Extracted feature tables are aligned by participant, task, and recording identifier.
 6. The aligned feature matrix is used for statistical analysis and cognitive impairment modeling.
 
@@ -114,7 +114,9 @@ Output is a CSV with one row per video/OpenFace file. Features include AU intens
 
 ### EEG Pipeline
 
-The EEG feature script processes each selected channel as a one-dimensional time series. In the broader study pipeline, raw EEG signals are band-pass filtered to suppress slow drift and high-frequency noise, dynamically quality-checked using sliding windows, corrected for artifacts using wavelet-based procedures and quantile normalization, and resampled when needed for uniform temporal representation.
+The EEG feature script processes each selected channel as a one-dimensional time series. In the broader study pipeline, EEG is acquired at 250 Hz, filtered at 0.5-50 Hz, and notch-filtered around 50 Hz to reduce power-line interference. Overlapping windows are evaluated by the provided CNN-LSTM artifact detector, and detected ocular, muscle, or movement-contaminated intervals are reconstructed using wavelet quantile normalization (WQN). Severely contaminated task trials should be rejected rather than forced through feature extraction.
+
+Downsampling to 100 Hz may be applied after artifact correction and appropriate anti-alias filtering when the highest analyzed frequency is safely below the 50 Hz Nyquist limit. Frequencies at or very near 50 Hz cannot be assumed to be preserved reliably after conversion to 100 Hz. However, the released EEG feature script does not itself filter or resample the input: it assumes that preprocessing has already been completed and uses the sampling rate supplied through `--fs`. Therefore, the recorded processing sampling rate must match the actual input data.
 
 The standard feature script extracts:
 
@@ -138,9 +140,9 @@ These features characterize cortical slowing, neural variability, transient sync
 
 ### ECG Pipeline
 
-The ECG script loads raw single-channel ECG, checks minimum duration, removes baseline wander using median filtering and detrending, applies low-pass filtering, performs wavelet denoising, and applies high-pass filtering to remove residual low-frequency trends.
+The ECG script loads raw single-channel ECG and requires at least 30 seconds of data for HRV processing. It removes baseline wander using a 2-second median filter and detrending, applies a configurable power-line notch (50 Hz by default), applies a 40 Hz low-pass filter, performs `db6` wavelet soft-threshold denoising, and then applies a 0.5 Hz high-pass filter to remove residual low-frequency trends. All filters are applied in zero phase. This 0.5-40 Hz processing band is used for robust R-peak, interval, and task-level morphology analysis.
 
-After preprocessing, the script detects R peaks with NeuroKit2 and delineates P, QRS, and T waves using wavelet-based ECG delineation. It then computes:
+After preprocessing, the script detects R peaks with NeuroKit2 and delineates P, QRS, and T waves using NeuroKit2's wavelet-based method. RR intervals below 300 ms or above 1300 ms are identified as physiologically implausible and corrected using cubic-spline interpolation, with linear interpolation used when fewer than four valid neighboring intervals are available. Recordings are rejected when more than 5% of NN intervals require correction. At least 20 valid NN intervals and at least 30 seconds of clean NN data are required. The script then computes:
 
 - Global signal statistics: mean, standard deviation, skewness, kurtosis, min, max, range.
 - Morphological features: P and T amplitude, PR interval, QRS duration, QT interval, JT interval, ST segment level.
@@ -150,11 +152,11 @@ After preprocessing, the script detects R peaks with NeuroKit2 and delineates P,
 - Nonlinear HRV features: NeuroKit2 `hrv_nonlinear` outputs, including entropy, Poincare, fragmentation, and fractal metrics when supported by the data length.
 - Cardiorespiratory coupling: ECG-derived respiration, RSA amplitude, and phase synchronization between heart-rate and EDR signals.
 
-Some HRV features require sufficiently long and stable recordings. When a feature group cannot be reliably estimated, the script logs a warning and continues with the remaining feature groups.
+Some HRV features require substantially longer and more stable recordings than the 30-second task minimum. VLF and ULF outputs are therefore set to missing unless at least 5 minutes of clean NN data are available. When another feature group cannot be estimated, the script logs a warning and continues with the remaining feature groups. The analyzed NN duration, valid NN count, correction fraction, and ECG preprocessing parameters are retained as quality-control fields.
 
 ### Speech Pipeline
 
-The speech script resamples audio to 16 kHz and normalizes amplitude for Librosa-based analysis. OpenSMILE eGeMAPSv02 functionals are extracted from the audio file to capture acoustic and paralinguistic properties, including pitch, loudness, jitter, shimmer, HNR, MFCCs, spectral flux, spectral slope, and voiced/unvoiced segment statistics.
+The speech script loads a 16 kHz mono waveform and normalizes its amplitude for the supplementary Librosa and silence-segmentation analyses. OpenSMILE eGeMAPSv02 functionals are extracted from the source audio file to capture acoustic and paralinguistic properties, including pitch, loudness, jitter, shimmer, HNR, MFCCs, spectral flux, spectral slope, and voiced/unvoiced segment statistics. The released script does not explicitly perform spectral-subtraction denoising or a pre-emphasis filter; these steps should only be reported if they are added to the executable preprocessing pipeline. Frame-level analysis is handled by the selected OpenSMILE configuration rather than by a separately coded 25 ms/10 ms framing stage in this repository.
 
 Supplementary Librosa features include:
 
@@ -187,7 +189,7 @@ The acoustic and semantic features jointly quantify vocal control, speech timing
 
 ### Video Pipeline
 
-The video script assumes OpenFace has generated frame-level CSV files. Low-confidence or failed frames are removed when `success` and `confidence` columns are present. The default confidence threshold is 0.7.
+The video script assumes OpenFace has generated frame-level CSV files containing face landmarks, AUs, head pose, and gaze estimates. Low-confidence or failed frames are removed when `success` and `confidence` columns are present; the default confidence threshold is 0.7. Face detection, landmark localization, and alignment are performed upstream by OpenFace. The released aggregation script does not independently select the largest detected face or apply histogram equalization, so these operations should not be described as implemented unless they are explicitly added to the raw-video preprocessing stage.
 
 The script extracts:
 
@@ -198,6 +200,34 @@ The script extracts:
 - Facial kinematics: landmark velocity and landmark-based asymmetry index when 68-point landmarks are available.
 
 These features capture facial expressiveness, psychomotor activity, visual attention, and facial motion asymmetry.
+
+<!-- ## Feature-Specific Signal Duration, Windowing, and Aggregation
+
+A single fixed signal duration is not appropriate for all EEG or ECG features. The analysis unit is therefore defined separately for each feature group and remains entirely within the same participant, session, and cognitive-task interval. Windows do not cross task boundaries or combine baseline and task periods.
+
+The following analysis-window rules are used for this task:
+
+| Modality and feature group | Analysis unit | Participant/task-level output |
+|---|---|---|
+| EEG time-domain and local waveform features | Fixed 2-second artifact-free windows | Compute each window separately and aggregate valid windows using mean and standard deviation, with median and IQR added for robust summaries |
+| EEG spectral power, ratios, PAF, SEF, and aperiodic slope | Fixed 4-second artifact-free windows, matching the maximum Welch segment length used by the released script | Aggregate across windows within the same task |
+| EEG entropy and nonlinear complexity | Fixed 10-second artifact-free windows | Compute each window separately using the same sample count for every participant; aggregate within task and mark unstable estimates as missing |
+| EEG multi-channel connectivity | Fixed 4-second simultaneous artifact-free windows from all required channels | Compute within each synchronized window and aggregate within task; never concatenate asynchronous or cross-task data |
+| ECG P-QRS-T morphology | Beat-centered segments or a task interval containing multiple clean beats; at least five beats is an execution minimum, not a reliability target | Compute per valid beat and summarize across beats using mean, standard deviation, and optionally median/IQR |
+| ECG heart rate and time-domain HRV | The longest continuous clean NN interval available within the task, with a minimum duration of 30 seconds | Compute from the complete valid NN series and report analyzed duration and valid-beat count |
+| ECG frequency-domain HRV | The longest stationary clean NN interval available within the task, with a minimum duration of 30 seconds | Compute LF, HF, total power, and LF/HF from the valid interval; do not calculate or interpret VLF unless at least 5 minutes are available |
+| ECG nonlinear, entropy, and fractal HRV | The longest continuous clean NN interval available within the task, with a minimum duration of 30 seconds and the algorithm-specific minimum NN count | Return missing when either the duration or NN-count requirement is not met |
+| Speech short-time acoustic features | Frame-level descriptors defined by OpenSMILE, followed by recording-level functionals | Aggregate across valid voiced frames; retain the complete task recording for pause and fluency measures |
+| Speech fluency and semantic features | Complete picture-description task and its matched transcript | Use the full task response; normalize count features by speaking or recording duration where appropriate |
+| Video AU, gaze, landmark, and head-motion features | Valid OpenFace frames within the complete task, or synchronized task subsegments when event-level analysis is required | Aggregate frame-level values and event rates within task; normalize counts by valid observed time |
+
+EEG windows use 50% overlap: a 1-second step for 2-second windows, a 2-second step for 4-second windows, and a 5-second step for 10-second windows. Only complete artifact-free windows are analyzed; incomplete trailing windows are discarded. Local EEG features are calculated from these fixed-length windows and summarized within each task.
+
+ECG HRV is calculated from the longest continuous valid segment within each task rather than from fixed short windows. The segment contains at least 30 seconds of clean NN intervals and extends to the full valid task duration whenever possible. Because HRV reliability depends on analyzed duration, the exact duration and valid NN count are stored with the extracted features. Speech fluency, semantic features, and video behavior features use the complete valid task recording.
+
+Aggregation preserves both central tendency and temporal variability. The task-level summary includes the mean and standard deviation across valid windows or beats, plus the median and IQR when distributions are skewed or residual artifacts remain. The number of valid windows or beats, analyzed duration, artifact proportion, and modality-specific quality score are retained as quality-control variables.
+
+Signal length is not chosen separately after viewing participant outcomes. Window duration, overlap, minimum valid sample or beat count, rejection threshold, and aggregation statistics are fixed before model evaluation and applied identically within each feature family. If a task recording is shorter than the prespecified requirement, the affected feature is marked missing rather than estimated from an invalid interval or padded with data from another task. -->
 
 ## Participant Variability, Sensor Variability, and Noise
 
@@ -256,7 +286,6 @@ We also provide a representative extracted feature file in `.npz` format (e.g., 
 | Demographics | Participant baseline variables (e.g., age, gender, education). |
 | Final Label | The binary final cognitive impairment label. |
 | Domain Targets | Binary targets mapped to various intermediate cognitive domains. |
-
 
 ## Output Feature Tables and Downstream Modeling
 

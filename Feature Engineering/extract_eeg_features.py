@@ -11,10 +11,9 @@ including:
 5. Waveform Morphology
 
 Usage:
-    python extract_eeg_features_standard.py --input path/to/signal.mat --fs 250 --output features.csv
+    python extract_eeg_features.py --input path/to/signal.mat --fs 100 --output features.csv
 """
 
-import os
 import argparse
 import numpy as np
 import pandas as pd
@@ -22,9 +21,68 @@ from scipy.signal import welch
 from scipy.stats import skew, kurtosis
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import pdist, squareform
-from scipy.integrate import cumtrapz
+try:
+    from scipy.integrate import cumulative_trapezoid
+except ImportError:
+    from scipy.integrate import cumtrapz as cumulative_trapezoid
 import antropy as ant
 import scipy.io as sio
+
+TIME_WINDOW_SECONDS = 2.0
+SPECTRAL_WINDOW_SECONDS = 4.0
+NONLINEAR_WINDOW_SECONDS = 10.0
+WINDOW_OVERLAP = 0.5
+
+NONLINEAR_FEATURE_NAMES = [
+    'lyapunov_exponent',
+    'fractal_dimension',
+    'lz_complexity',
+    'petrosian_fd',
+]
+
+ENTROPY_FEATURE_NAMES = [
+    'apen',
+    'sampen',
+    'pe',
+    'fuzzy_entropy',
+    'differential_entropy',
+    'multiscale_entropy',
+]
+
+SPECTRAL_FEATURE_NAMES = [
+    'band_energy_1',
+    'band_energy_2',
+    'band_energy_3',
+    'band_energy_4',
+    'band_energy_5',
+    'ratio1',
+    'ratio2',
+    'peak_alpha_frequency',
+    'spectral_edge_frequency',
+    'mean_frequency',
+    'median_frequency',
+    'aperiodic_exponent',
+    'spectral_entropy',
+]
+
+TIME_FEATURE_NAMES = [
+    'rms_amplitude',
+    'skewness',
+    'kurtosis',
+    'diff1_mean',
+    'diff1_std',
+    'diff2_mean',
+    'diff2_std',
+    'diff3_mean',
+    'diff3_std',
+    'hjorth_activity',
+    'hjorth_mobility',
+    'hjorth_complexity',
+    'peak_amplitude',
+    'zcr',
+    'line_length',
+    'teager_kaiser_energy',
+]
 
 
 # ==========================================
@@ -60,7 +118,7 @@ def calc_petrosian_fd(signal):
     num_sign_changes = np.sum(np.diff(np.sign(diff)) != 0)
     return np.log10(N) / (np.log10(N) + np.log10(N / (N + 0.4 * num_sign_changes)))
 
-def calc_lyapunov_exponent(signal, m=3, tau=2, max_t=20, theiler=None):
+def calc_lyapunov_exponent(signal, fs=1.0, m=3, tau=2, max_t=20, theiler=None):
     """Largest Lyapunov exponent using a compact Rosenstein-style estimate."""
     n = len(signal)
     N_embed = n - (m - 1) * tau
@@ -103,7 +161,7 @@ def calc_lyapunov_exponent(signal, m=3, tau=2, max_t=20, theiler=None):
         distances = distances[distances > 0]
         if len(distances) > 1:
             mean_log_divergence.append(np.mean(np.log(distances)))
-            times.append(k / tau)
+            times.append(k / fs)
 
     if len(times) < 2:
         return np.nan
@@ -148,9 +206,9 @@ def calc_multiscale_entropy(signal, max_scale=3):
             coarse = np.mean(np.reshape(signal[:length], (-1, scale)), axis=1)
         try:
             mse.append(ant.sample_entropy(coarse))
-        except:
+        except Exception:
             mse.append(np.nan)
-    return np.nanmean(mse)
+    return np.nanmean(mse) if np.any(np.isfinite(mse)) else np.nan
 
 def calc_spectral_entropy(psd):
     """Spectral Entropy from PSD"""
@@ -167,6 +225,8 @@ def calc_spectral_entropy(psd):
 
 def calc_spectral_features(signal, fs):
     """Extract all spectral features, bands, and ratios."""
+    if fs <= 0:
+        raise ValueError("Sampling frequency must be positive.")
     nperseg = int(min(len(signal), fs * 4))
     freqs, psd = welch(signal, fs, nperseg=nperseg)
     total_power = np.trapz(psd, freqs) + 1e-12
@@ -197,7 +257,7 @@ def calc_spectral_features(signal, fs):
     paf = freqs[idx_alpha][np.argmax(psd[idx_alpha])] if np.sum(idx_alpha) > 0 else np.nan
     
     # SEF (Spectral Edge Frequency 95%)
-    cum_power = cumtrapz(psd, freqs, initial=0)
+    cum_power = cumulative_trapezoid(psd, freqs, initial=0)
     idx_95 = np.where(cum_power >= 0.95 * total_power)[0]
     sef95 = freqs[idx_95[0]] if len(idx_95) > 0 else np.nan
     
@@ -297,68 +357,202 @@ def calc_time_domain_and_morphology(signal):
 # Orchestrator
 # ==========================================
 
-def extract_all_features(signal, fs):
-    """
-    Run all feature extraction categories and return a flat dictionary.
-    """
-    signal = np.asarray(signal, dtype=np.float64).flatten()
+def extract_nonlinear_features(signal, fs):
+    """Extract nonlinear and entropy features from one 10-second window."""
     features = {}
-    
-    # 1. Nonlinear Complexity
-    features['lyapunov_exponent'] = calc_lyapunov_exponent(signal)
-    features['fractal_dimension'] = ant.higuchi_fd(signal)
-    features['lz_complexity'] = calc_lz_complexity(signal)
-    features['petrosian_fd'] = calc_petrosian_fd(signal)
-    
-    # 2. Information Entropy
+
+    try:
+        features['lyapunov_exponent'] = calc_lyapunov_exponent(
+            signal,
+            fs=fs,
+            max_t=max(20, int(round(0.5 * fs))),
+            theiler=max(1, int(round(0.5 * fs))),
+        )
+    except Exception:
+        features['lyapunov_exponent'] = np.nan
+
+    for name, function in (
+        ('fractal_dimension', ant.higuchi_fd),
+        ('lz_complexity', calc_lz_complexity),
+        ('petrosian_fd', calc_petrosian_fd),
+    ):
+        try:
+            features[name] = function(signal)
+        except Exception:
+            features[name] = np.nan
+
     try:
         features['apen'] = ant.app_entropy(signal)
-    except:
+    except Exception:
         features['apen'] = np.nan
-        
-    features['sampen'] = ant.sample_entropy(signal)
-    features['pe'] = ant.perm_entropy(signal, normalize=True)
-    features['fuzzy_entropy'] = calc_fuzzy_entropy(signal)
+
+    for name, function in (
+        ('sampen', ant.sample_entropy),
+        ('pe', lambda x: ant.perm_entropy(x, normalize=True)),
+        ('fuzzy_entropy', calc_fuzzy_entropy),
+        ('multiscale_entropy', calc_multiscale_entropy),
+    ):
+        try:
+            features[name] = function(signal)
+        except Exception:
+            features[name] = np.nan
+
     features['differential_entropy'] = 0.5 * np.log(2 * np.pi * np.e * np.var(signal) + 1e-12)
-    features['multiscale_entropy'] = calc_multiscale_entropy(signal)
-    
-    # 3. Spectral Power and Ratios
-    spectral_feats = calc_spectral_features(signal, fs)
-    features.update(spectral_feats)
-    
-    # 4 & 5. Time-Domain Statistics & Waveform Morphology
-    time_feats = calc_time_domain_and_morphology(signal)
-    features.update(time_feats)
-    
     return features
+
+
+def iter_valid_windows(signal, fs, window_seconds, overlap=WINDOW_OVERLAP):
+    """Yield complete finite, non-flat windows without bridging missing samples."""
+    window_samples = int(round(window_seconds * fs))
+    step_samples = int(round(window_samples * (1.0 - overlap)))
+    if window_samples < 4 or step_samples < 1:
+        raise ValueError("Window settings are incompatible with the sampling rate.")
+
+    for start in range(0, len(signal) - window_samples + 1, step_samples):
+        window = signal[start:start + window_samples]
+        if not np.all(np.isfinite(window)):
+            continue
+        if np.std(window) <= np.finfo(float).eps:
+            continue
+        yield window
+
+
+def count_candidate_windows(signal_length, fs, window_seconds, overlap=WINDOW_OVERLAP):
+    """Return the number of complete windows before quality rejection."""
+    window_samples = int(round(window_seconds * fs))
+    step_samples = int(round(window_samples * (1.0 - overlap)))
+    if signal_length < window_samples or step_samples < 1:
+        return 0
+    return 1 + (signal_length - window_samples) // step_samples
+
+
+def aggregate_window_features(window_features, feature_names):
+    """Keep original names as window means and add dispersion summaries."""
+    aggregated = {}
+    for name in feature_names:
+        values = np.asarray(
+            [features.get(name, np.nan) for features in window_features],
+            dtype=float,
+        )
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            aggregated[name] = np.nan
+            aggregated[f'{name}_std'] = np.nan
+            aggregated[f'{name}_median'] = np.nan
+            aggregated[f'{name}_iqr'] = np.nan
+            continue
+        aggregated[name] = np.mean(values)
+        aggregated[f'{name}_std'] = np.std(values)
+        aggregated[f'{name}_median'] = np.median(values)
+        aggregated[f'{name}_iqr'] = np.percentile(values, 75) - np.percentile(values, 25)
+    return aggregated
+
+
+def extract_windowed_features(signal, fs):
+    """Extract feature groups using the prespecified 2/4/10-second windows."""
+    signal = np.asarray(signal, dtype=np.float64).flatten()
+    if fs <= 0:
+        raise ValueError("Sampling frequency must be positive.")
+    if signal.size == 0:
+        raise ValueError("EEG signal is empty.")
+
+    time_windows = list(iter_valid_windows(signal, fs, TIME_WINDOW_SECONDS))
+    spectral_windows = list(iter_valid_windows(signal, fs, SPECTRAL_WINDOW_SECONDS))
+    nonlinear_windows = list(iter_valid_windows(signal, fs, NONLINEAR_WINDOW_SECONDS))
+
+    time_results = [calc_time_domain_and_morphology(window) for window in time_windows]
+    spectral_results = [calc_spectral_features(window, fs) for window in spectral_windows]
+    nonlinear_results = [extract_nonlinear_features(window, fs) for window in nonlinear_windows]
+    time_candidates = count_candidate_windows(len(signal), fs, TIME_WINDOW_SECONDS)
+    spectral_candidates = count_candidate_windows(len(signal), fs, SPECTRAL_WINDOW_SECONDS)
+    nonlinear_candidates = count_candidate_windows(len(signal), fs, NONLINEAR_WINDOW_SECONDS)
+
+    features = {}
+    features.update(aggregate_window_features(time_results, TIME_FEATURE_NAMES))
+    features.update(aggregate_window_features(spectral_results, SPECTRAL_FEATURE_NAMES))
+    features.update(
+        aggregate_window_features(
+            nonlinear_results,
+            NONLINEAR_FEATURE_NAMES + ENTROPY_FEATURE_NAMES,
+        )
+    )
+
+    features.update({
+        'eeg_sampling_rate_hz': fs,
+        'eeg_recording_duration_seconds': signal.size / fs,
+        'eeg_finite_sample_fraction': np.mean(np.isfinite(signal)),
+        'eeg_time_window_seconds': TIME_WINDOW_SECONDS,
+        'eeg_spectral_window_seconds': SPECTRAL_WINDOW_SECONDS,
+        'eeg_nonlinear_window_seconds': NONLINEAR_WINDOW_SECONDS,
+        'eeg_window_overlap_fraction': WINDOW_OVERLAP,
+        'eeg_valid_time_window_count': len(time_windows),
+        'eeg_valid_spectral_window_count': len(spectral_windows),
+        'eeg_valid_nonlinear_window_count': len(nonlinear_windows),
+        'eeg_candidate_time_window_count': time_candidates,
+        'eeg_candidate_spectral_window_count': spectral_candidates,
+        'eeg_candidate_nonlinear_window_count': nonlinear_candidates,
+        'eeg_valid_time_window_fraction': (
+            len(time_windows) / time_candidates if time_candidates else 0.0
+        ),
+        'eeg_valid_spectral_window_fraction': (
+            len(spectral_windows) / spectral_candidates if spectral_candidates else 0.0
+        ),
+        'eeg_valid_nonlinear_window_fraction': (
+            len(nonlinear_windows) / nonlinear_candidates if nonlinear_candidates else 0.0
+        ),
+    })
+    return features
+
+
+def extract_all_features(signal, fs):
+    """Backward-compatible entry point using feature-specific windows."""
+    return extract_windowed_features(signal, fs)
+
+
+def load_eeg_channel(input_path, channel):
+    """Load one EEG channel from a MATLAB file without joining missing segments."""
+    data = sio.loadmat(input_path)
+    arrays = [
+        value for key, value in data.items()
+        if not key.startswith('__') and isinstance(value, np.ndarray) and np.issubdtype(value.dtype, np.number)
+    ]
+    if 'data' in data and isinstance(data['data'], np.ndarray):
+        eeg_mat = data['data']
+    elif arrays:
+        eeg_mat = arrays[0]
+    else:
+        raise ValueError("No numeric signal array was found in the MATLAB file.")
+
+    eeg_mat = np.asarray(eeg_mat, dtype=np.float64)
+    eeg_mat = np.squeeze(eeg_mat)
+    if eeg_mat.ndim == 1:
+        if channel != 0:
+            raise IndexError("A one-dimensional input only contains channel 0.")
+        return eeg_mat
+    if eeg_mat.ndim != 2:
+        raise ValueError(f"Expected a 1D or 2D EEG array, received shape {eeg_mat.shape}.")
+    if eeg_mat.shape[0] < eeg_mat.shape[1]:
+        eeg_mat = eeg_mat.T
+    if channel < 0 or channel >= eeg_mat.shape[1]:
+        raise IndexError(f"Channel {channel} is outside the valid range 0-{eeg_mat.shape[1] - 1}.")
+    return eeg_mat[:, channel]
 
 
 def main():
     parser = argparse.ArgumentParser(description="Extract EEG Features defined in M3-CIA framework.")
     parser.add_argument("--input", type=str, required=True, help="Path to input .mat file")
     parser.add_argument("--output", type=str, default="features.csv", help="Output CSV path")
-    parser.add_argument("--fs", type=float, default=250, help="Sampling frequency (Hz)")
+    parser.add_argument("--fs", type=float, default=100, help="Sampling frequency (Hz)")
     parser.add_argument("--channel", type=int, default=0, help="Channel index to process")
     
     args = parser.parse_args()
     
     print(f"Loading {args.input}...")
     try:
-        data = sio.loadmat(args.input)
-        if 'data' in data:
-            eeg_mat = data['data']
-        else:
-            eeg_mat = next(v for k, v in data.items() if isinstance(v, np.ndarray))
-            
-        eeg_mat = np.array(eeg_mat)
-        if eeg_mat.ndim == 2 and eeg_mat.shape[0] < eeg_mat.shape[1]:
-            eeg_mat = eeg_mat.T
-            
-        signal = eeg_mat[:, args.channel].flatten()
-        signal = signal[~np.isnan(signal)]
+        signal = load_eeg_channel(args.input, args.channel)
         
         print("Extracting features (this may take a moment)...")
-        features = extract_all_features(signal, args.fs)
+        features = extract_windowed_features(signal, args.fs)
         
         # Save to CSV
         df = pd.DataFrame([features])
